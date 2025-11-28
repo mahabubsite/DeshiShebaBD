@@ -1,0 +1,7 @@
+{
+  "name": "DeshiSheba - Local Services",
+  "description": "Find and share local services in Bangladesh. Auto-detects your area to find hospitals, police, banks, and more.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
