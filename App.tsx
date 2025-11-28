@@ -1109,7 +1109,7 @@ const BlogManagement = () => {
         setLoading(true);
         try {
             await addBlog({
-                title, excerpt, content, imageUrl: imageUrl || '/assets/Blog Thumbnail.jpg',
+                title, excerpt, content, imageUrl: imageUrl || '/assets/BlogThumbnail.jpg',
                 authorName: user.displayName || 'Admin',
                 createdAt: Date.now()
             });
