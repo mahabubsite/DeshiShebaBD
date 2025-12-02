@@ -3,7 +3,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, getDocs, query, where, Timestamp, doc, updateDoc, deleteDoc, onSnapshot, setDoc, getDoc, orderBy, writeBatch, increment, limit } from 'firebase/firestore';
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { firebaseConfig, DEFAULT_CATEGORY_DEFINITIONS, MOCK_SERVICES } from '../constants';
-import { ServiceEntry, ServiceStatus, UserProfile, UserDocument, CategoryDefinition, ReportDocument, NotificationDocument, BlogDocument } from '../types';
+import { ServiceEntry, ServiceStatus, UserProfile, UserDocument, CategoryDefinition, ReportDocument, NotificationDocument, BlogDocument, SiteSettings } from '../types';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -17,6 +17,7 @@ const categoriesRef = collection(db, 'categories');
 const reportsRef = collection(db, 'reports');
 const notificationsRef = collection(db, 'notifications');
 const blogsRef = collection(db, 'blogs');
+const settingsRef = collection(db, 'settings');
 
 // --- Helper: Sync User to Firestore ---
 const syncUserToFirestore = async (user: User) => {
@@ -96,13 +97,23 @@ export const seedDatabase = async () => {
 
   console.log("Starting database seeding/restoration...");
 
-  // 1. Seed Categories
+  // 1. Seed Categories (Sanitized)
   const catSnapshot = await getDocs(categoriesRef);
   if (catSnapshot.empty) {
     console.log("Seeding categories...");
     for (const cat of DEFAULT_CATEGORY_DEFINITIONS) {
       const docRef = doc(db, 'categories', cat.id);
-      batch.set(docRef, cat);
+      
+      // Sanitize fields to ensure no undefined values
+      const sanitizedCat = {
+        ...cat,
+        fields: cat.fields.map(f => ({
+          ...f,
+          placeholder: f.placeholder || ""
+        }))
+      };
+
+      batch.set(docRef, sanitizedCat);
       operationCount++;
     }
   } else {
@@ -143,6 +154,61 @@ export const incrementViewCount = async (collectionName: 'services' | 'blogs', i
     console.warn("Failed to increment view", e);
   }
 }
+
+// --- Favorites Management ---
+
+export const toggleFavorite = async (uid: string, serviceId: string) => {
+  try {
+    const favRef = doc(db, 'users', uid, 'favorites', serviceId);
+    const snap = await getDoc(favRef);
+    if (snap.exists()) {
+      await deleteDoc(favRef);
+      return false; // Removed
+    } else {
+      await setDoc(favRef, { savedAt: Date.now() });
+      return true; // Added
+    }
+  } catch (e) {
+    console.error("Error toggling favorite", e);
+    throw e;
+  }
+};
+
+export const checkIsFavorite = async (uid: string, serviceId: string): Promise<boolean> => {
+  try {
+    const favRef = doc(db, 'users', uid, 'favorites', serviceId);
+    const snap = await getDoc(favRef);
+    return snap.exists();
+  } catch (e) {
+    return false;
+  }
+};
+
+export const fetchUserFavorites = async (uid: string): Promise<ServiceEntry[]> => {
+  try {
+    const favsRef = collection(db, 'users', uid, 'favorites');
+    const snap = await getDocs(favsRef);
+    
+    if (snap.empty) return [];
+
+    const serviceIds = snap.docs.map(d => d.id);
+    const services: ServiceEntry[] = [];
+
+    // Firestore doesn't support "where id in [large array]" well for many items, 
+    // but for user favorites, fetching individually or in batches is okay.
+    // For simplicity, we fetch individually in parallel.
+    await Promise.all(serviceIds.map(async (sid) => {
+       const s = await getServiceById(sid);
+       if(s) services.push(s);
+    }));
+
+    return services;
+  } catch (e) {
+    console.error("Error fetching favorites", e);
+    return [];
+  }
+};
+
 
 // --- Service Management (Real Firestore) ---
 
@@ -197,8 +263,6 @@ export const fetchServices = async (status: ServiceStatus = ServiceStatus.APPROV
 
 export const fetchPopularServices = async (): Promise<ServiceEntry[]> => {
   try {
-    // Note: In production, you'd use orderBy('views', 'desc'), limit(4)
-    // But that requires a specific index. To prevent errors for now, we sort client-side.
     const q = query(servicesRef, where("status", "==", ServiceStatus.APPROVED));
     const querySnapshot = await getDocs(q);
     const all = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ServiceEntry));
@@ -411,11 +475,86 @@ export const getBlogById = async (id: string): Promise<BlogDocument | null> => {
   }
 }
 
+export const updateBlog = async (id: string, blogData: Partial<BlogDocument>) => {
+  try {
+    const docRef = doc(db, 'blogs', id);
+    // Remove id and views from update to preserve them
+    const { id: _, views: __, ...updateData } = blogData as any;
+    await updateDoc(docRef, updateData);
+  } catch(e) {
+    console.error(e);
+    throw e;
+  }
+}
+
 export const deleteBlog = async (id: string) => {
   try {
     await deleteDoc(doc(db, 'blogs', id));
   } catch(e) {
     console.error(e);
+    throw e;
+  }
+}
+
+export const updateNotification = async (id: string, notifData: Partial<NotificationDocument>) => {
+  try {
+    const docRef = doc(db, 'notifications', id);
+    // Remove id from update
+    const { id: _, ...updateData } = notifData as any;
+    await updateDoc(docRef, updateData);
+  } catch(e) {
+    console.error(e);
+    throw e;
+  }
+}
+
+export const deleteNotification = async (id: string) => {
+  try {
+    await deleteDoc(doc(db, 'notifications', id));
+  } catch(e) {
+    console.error(e);
+    throw e;
+  }
+}
+
+// --- Site Settings Management ---
+
+export const fetchSiteSettings = async (): Promise<SiteSettings> => {
+  try {
+    const docRef = doc(db, 'settings', 'general');
+    const snap = await getDoc(docRef);
+    if(snap.exists()) {
+      return { id: 'general', ...snap.data() } as SiteSettings;
+    }
+    // Return Default Settings
+    return {
+      id: 'general',
+      termsContent: 'Default Terms of Service...',
+      privacyContent: 'Default Privacy Policy...',
+      contactEmail: 'support@deshisheba.com',
+      contactPhone: '+880 1700 000000',
+      contactAddress: 'Dhaka, Bangladesh',
+      facebookUrl: 'https://facebook.com',
+      twitterUrl: 'https://twitter.com',
+      instagramUrl: 'https://instagram.com',
+      footerText: `© ${new Date().getFullYear()} DeshiSheba. Built for Bangladesh 🇧🇩`
+    };
+  } catch(e) {
+    console.error("Error fetching settings", e);
+    return {
+        id: 'general',
+        termsContent: '', privacyContent: '', contactEmail: '', contactPhone: '', contactAddress: '',
+        facebookUrl: '', twitterUrl: '', instagramUrl: '', footerText: ''
+    };
+  }
+}
+
+export const saveSiteSettings = async (settings: SiteSettings) => {
+  try {
+    const docRef = doc(db, 'settings', 'general');
+    await setDoc(docRef, settings);
+  } catch(e) {
+    console.error("Error saving settings", e);
     throw e;
   }
 }

@@ -55,6 +55,7 @@ export interface ServiceEntry {
   description: string;
   phone: string;
   address: LocationHierarchy;
+  isWholeCountry?: boolean; // New: Optional location
   location?: { lat: number; lng: number }; // Optional coords
   status: ServiceStatus;
   submittedBy: string; // User UID (Secure)
@@ -109,4 +110,17 @@ export interface BlogDocument {
   createdAt: number;
   imageUrl?: string;
   views?: number; // Track reads
+}
+
+export interface SiteSettings {
+  id: string; // 'general'
+  termsContent: string;
+  privacyContent: string;
+  contactEmail: string;
+  contactPhone: string;
+  contactAddress: string;
+  facebookUrl: string;
+  twitterUrl: string;
+  instagramUrl: string;
+  footerText: string;
 }

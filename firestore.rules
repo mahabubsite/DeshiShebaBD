@@ -1,1 +1,66 @@
-®é^³ûÞ®È¨
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { return request.auth.token.email == 'admin@deshisheba.com'; }
+    function isOwner(userId) { return request.auth.uid == userId; }
+
+    // --- Services Collection ---
+    match /services/{serviceId} {
+      allow read: if resource.data.status == 'APPROVED' || 
+                  (isSignedIn() && resource.data.submittedBy == request.auth.uid) || 
+                  isAdmin();
+      allow create: if isAdmin() || 
+                    (isSignedIn() && request.resource.data.status == 'PENDING' && request.resource.data.submittedBy == request.auth.uid);
+      allow update: if isAdmin() || 
+                    (isSignedIn() && resource.data.submittedBy == request.auth.uid) ||
+                    (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']));
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.submittedBy == request.auth.uid);
+    }
+
+    // --- Blogs Collection ---
+    match /blogs/{blogId} {
+      allow read: if true;
+      allow write: if isAdmin();
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views']);
+    }
+
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read, write: if isAdmin() || isOwner(userId);
+      
+      // Allow users to manage their own favorites subcollection
+      match /favorites/{favId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // --- Categories Collection ---
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // --- Reports Collection ---
+    match /reports/{reportId} {
+      allow create: if true;
+      allow read, delete: if isAdmin();
+    }
+
+    // --- Notifications Collection ---
+    match /notifications/{notifId} {
+      allow read: if isAdmin() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.userId == 'ALL'));
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+    
+    // --- Site Settings ---
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
