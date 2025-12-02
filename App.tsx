@@ -87,7 +87,7 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link to="/" className="flex items-center gap-2 group">
            {/* Custom Logo */}
-           <img src="assets/DeshiSheba.png" className="w-9 h-9 object-contain" alt="Logo" />
+           <img src="/DeshiSheba.png" className="w-9 h-9 object-contain" alt="DeshiSheba Logo" />
            <span className="font-bold text-xl text-slate-800 dark:text-white tracking-tight">Deshi<span className="text-primary-600">Sheba</span></span>
         </Link>
 
@@ -183,7 +183,7 @@ const Footer = () => {
                 <div className="space-y-4">
                     <div className="flex items-center gap-2">
                         {/* Custom Logo */}
-                        <img src="assets/DeshiSheba.png" className="w-8 h-8 object-contain bg-white rounded-lg p-1" alt="Logo" />
+                        <img src="/DeshiSheba.png" className="w-8 h-8 object-contain bg-white rounded-lg p-1" alt="Logo" />
                         <span className="font-bold text-xl text-white">Deshi<span className="text-primary-500">Sheba</span></span>
                     </div>
                     <p className="text-sm text-slate-400 leading-relaxed">
